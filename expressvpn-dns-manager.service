@@ -1,0 +1,23 @@
+[Unit]
+Description=ExpressVPN DNS Manager
+After=network.target systemd-resolved.service
+Wants=systemd-resolved.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+User=root
+ExecStart=/usr/local/bin/expressvpn-dns-manager.sh monitor
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=process
+TimeoutStopSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=expressvpn-dns-manager
+
+[Install]
+WantedBy=multi-user.target
