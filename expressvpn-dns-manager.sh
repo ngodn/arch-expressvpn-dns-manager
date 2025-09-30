@@ -8,6 +8,19 @@ RESOLVED_CONF="/etc/systemd/resolved.conf"
 BACKUP_CONF="/etc/systemd/resolved.conf.backup-original"
 LOG_FILE="/var/log/expressvpn-dns-manager.log"
 
+# Detect ExpressVPN CLI command (v3.x uses 'expressvpn', v4.x uses 'expressvpnctl')
+detect_expressvpn_command() {
+    if command -v expressvpnctl &> /dev/null; then
+        echo "expressvpnctl"
+    elif command -v expressvpn &> /dev/null; then
+        echo "expressvpn"
+    else
+        echo ""
+    fi
+}
+
+EXPRESSVPN_CMD=$(detect_expressvpn_command)
+
 # DNS servers for testing and fallback
 GOOGLE_DNS_V4="8.8.8.8 8.8.4.4"
 GOOGLE_DNS_V6="2001:4860:4860::8888 2001:4860:4860::8844"
@@ -122,7 +135,7 @@ backup_original_config() {
 
 # Get ExpressVPN DNS server from current connection
 get_expressvpn_dns() {
-    if ! expressvpn status | grep -q "Connected"; then
+    if ! $EXPRESSVPN_CMD status | grep -q "Connected"; then
         echo ""
         return 1
     fi
@@ -141,7 +154,7 @@ get_expressvpn_dns() {
     
     # Method 3: Try to extract from ExpressVPN status output
     if [[ -z "$vpn_dns" ]]; then
-        local status_output=$(expressvpn status 2>/dev/null)
+        local status_output=$($EXPRESSVPN_CMD status 2>/dev/null)
         # Look for IP patterns that might be DNS servers
         vpn_dns=$(echo "$status_output" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -E '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|100\.64\.)' | head -1)
     fi
@@ -226,7 +239,7 @@ EOF
 
 # Check ExpressVPN status and configure DNS accordingly
 check_and_configure() {
-    if expressvpn status | grep -q "Connected"; then
+    if $EXPRESSVPN_CMD status | grep -q "Connected"; then
         log "ExpressVPN is connected"
         configure_vpn_dns
     else
@@ -238,24 +251,24 @@ check_and_configure() {
 # Monitor ExpressVPN status continuously
 monitor_expressvpn() {
     local previous_status=""
-    
-    log "Starting ExpressVPN DNS monitoring"
-    
+
+    log "Starting ExpressVPN DNS monitoring (using: $EXPRESSVPN_CMD)"
+
     while true; do
         local current_status
-        if expressvpn status | grep -q "Connected"; then
+        if $EXPRESSVPN_CMD status | grep -q "Connected"; then
             current_status="connected"
         else
             current_status="disconnected"
         fi
-        
+
         # Only act on status changes
         if [[ "$current_status" != "$previous_status" ]]; then
             log "ExpressVPN status changed: $previous_status -> $current_status"
             check_and_configure
             previous_status="$current_status"
         fi
-        
+
         sleep 5
     done
 }

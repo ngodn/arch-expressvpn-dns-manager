@@ -37,24 +37,38 @@ check_root() {
     fi
 }
 
+# Detect ExpressVPN CLI command (v3.x uses 'expressvpn', v4.x uses 'expressvpnctl')
+detect_expressvpn_command() {
+    if command -v expressvpnctl &> /dev/null; then
+        echo "expressvpnctl"
+    elif command -v expressvpn &> /dev/null; then
+        echo "expressvpn"
+    else
+        echo ""
+    fi
+}
+
 # Check if ExpressVPN is installed and handle connection
 check_expressvpn() {
-    if ! command -v expressvpn &> /dev/null; then
+    local EXPRESSVPN_CMD=$(detect_expressvpn_command)
+
+    if [[ -z "$EXPRESSVPN_CMD" ]]; then
         log_error "ExpressVPN CLI not found. Please install ExpressVPN first."
+        log_error "Looking for either 'expressvpn' (v3.x) or 'expressvpnctl' (v4.x)"
         exit 1
     fi
-    log_info "ExpressVPN CLI found"
-    
+    log_info "ExpressVPN CLI found: $EXPRESSVPN_CMD"
+
     # Check if ExpressVPN is currently connected
-    if expressvpn status | grep -q "Connected"; then
+    if $EXPRESSVPN_CMD status | grep -q "Connected"; then
         log_warn "ExpressVPN is currently connected"
         read -p "Disconnect ExpressVPN to proceed with installation? (Y/n): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Nn]$ ]]; then
             log_info "Disconnecting ExpressVPN..."
-            expressvpn disconnect
+            $EXPRESSVPN_CMD disconnect
             sleep 2
-            if expressvpn status | grep -q "Connected"; then
+            if $EXPRESSVPN_CMD status | grep -q "Connected"; then
                 log_error "Failed to disconnect ExpressVPN. Please disconnect manually and try again."
                 exit 1
             else
@@ -256,17 +270,20 @@ main() {
 
 # Check ExpressVPN connection for uninstall
 check_expressvpn_for_uninstall() {
-    if command -v expressvpn &> /dev/null; then
+    local EXPRESSVPN_CMD=$(detect_expressvpn_command)
+
+    if [[ -n "$EXPRESSVPN_CMD" ]]; then
+        log_info "ExpressVPN CLI found: $EXPRESSVPN_CMD"
         # Check if ExpressVPN is currently connected
-        if expressvpn status | grep -q "Connected"; then
+        if $EXPRESSVPN_CMD status | grep -q "Connected"; then
             log_warn "ExpressVPN is currently connected"
             read -p "Disconnect ExpressVPN to proceed with clean uninstallation? (Y/n): " -n 1 -r
             echo
             if [[ ! $REPLY =~ ^[Nn]$ ]]; then
                 log_info "Disconnecting ExpressVPN..."
-                expressvpn disconnect
+                $EXPRESSVPN_CMD disconnect
                 sleep 2
-                if expressvpn status | grep -q "Connected"; then
+                if $EXPRESSVPN_CMD status | grep -q "Connected"; then
                     log_warn "Failed to disconnect ExpressVPN. Proceeding with uninstallation anyway."
                 else
                     log_info "ExpressVPN disconnected successfully"
